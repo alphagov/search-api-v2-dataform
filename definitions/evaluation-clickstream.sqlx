@@ -7,39 +7,37 @@ config {
 
 MERGE INTO `${dataform.projectConfig.vars.project_id}.automated_evaluation_input.clickstream` T
 USING (
-  WITH 
+  WITH
   events AS (
     SELECT
-      CASE ga.user_pseudo_id
-        WHEN 'false' THEN CONCAT(ga.user_pseudo_id,(SELECT SAFE_CAST(value.int_value AS STRING) FROM UNNEST(event_params) WHERE key = 'ga_session_id'))
-        ELSE ga.user_pseudo_id
+      CASE user_pseudo_id
+        WHEN 'false' THEN CONCAT(user_pseudo_id, SAFE_CAST(ga_sessionid AS STRING))
+        ELSE user_pseudo_id
       END AS userPseudoId,
-      FORMAT_TIMESTAMP("%FT%TZ",TIMESTAMP_MICROS(ga.event_timestamp)) AS eventTime,
-      item.item_id AS link,
-      item_params.value.string_value as id,
-      (SELECT COALESCE(value.string_value,SAFE_CAST(value.int_value AS STRING),SAFE_CAST(value.double_value AS STRING),SAFE_CAST(value.float_value AS STRING)) FROM UNNEST(event_params) WHERE key = 'search_term') AS searchQuery
-    FROM `ga4-analytics-352613.analytics_330577055.events_*` ga,
-      UNNEST(items) AS item,
-      UNNEST(item.item_params) as item_params
+      FORMAT_TIMESTAMP("%FT%TZ",TIMESTAMP_MICROS(event_timestamp)) AS eventTime,
+      item_id AS link,
+      item_content_id as id,
+      search_term AS searchQuery
+    FROM `ga4-analytics-352613.flattened_dataset.partitioned_flattened_events`
     WHERE
-      ga.event_name='select_item' AND
-      item.item_list_name='Search' AND
-      EXISTS (SELECT 1 FROM UNNEST(event_params) WHERE KEY = 'search_term') AND
-      regexp_extract((SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'page_location'), "order=([a-zA-Z\\\\-]+)" ) IS NULL AND
-      ARRAY_TO_STRING(regexp_extract_all((SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'page_location'), "((?:level_one_taxon|level_two_taxon|content_purpose_supergroup%5B%5D|public_timestamp%5Bfrom%5D|public_timestamp%5Bto%5D)=(?:%20&%20|[^&])*)" ), "&") ='' AND
-      _TABLE_SUFFIX BETWEEN FORMAT_DATE('%Y%m%d',DATE_TRUNC(DATE_SUB(CURRENT_DATE(),INTERVAL 3 MONTH),MONTH)) AND FORMAT_DATE('%Y%m%d',DATE_TRUNC(CURRENT_DATE(),MONTH))
-  ), 
+      event_name = 'select_item' AND
+      item_list_name = 'Search' AND
+      search_term IS NOT NULL AND
+      regexp_extract(page_location, "order=([a-zA-Z\\\\-]+)" ) IS NULL AND
+      ARRAY_TO_STRING(regexp_extract_all(page_location, "((?:level_one_taxon|level_two_taxon|content_purpose_supergroup%5B%5D|public_timestamp%5Bfrom%5D|public_timestamp%5Bto%5D)=(?:%20&%20|[^&])*)" ), "&") = '' AND
+      event_date BETWEEN DATE_TRUNC(DATE_SUB(CURRENT_DATE(),INTERVAL 3 MONTH),MONTH) AND DATE_TRUNC(CURRENT_DATE(),MONTH)
+  ),
   grouped AS (
-    SELECT 
+    SELECT
       MAX(events.searchQuery) AS query,
       MIN(events.link) AS link,
       MAX(events.id) AS id,
       COUNT(*) AS count
     FROM events
     GROUP BY CONCAT(events.searchQuery,events.id)
-  ), 
+  ),
   filtered AS (
-    SELECT 
+    SELECT
       query,
       link,
       count,
@@ -57,10 +55,10 @@ USING (
         ) AS total,
       id
     FROM grouped
-  ), 
+  ),
   scored AS (
     SELECT *,
-      CASE 
+      CASE
         WHEN count>1 AND ratio>0.25 THEN 3
         WHEN count>1 AND ratio>0.025 THEN 2
         WHEN count>1 AND ratio>0.0005 THEN 1
@@ -85,7 +83,7 @@ USING (
   GROUP BY query
   ORDER BY MAX(total) DESC
   LIMIT 1000) S
-ON 
+ON
   T._PARTITIONTIME = S._PARTITIONTIME AND
   to_json_string(T.queryEntry) = to_json_string(S.queryEntry)
   WHEN NOT MATCHED
