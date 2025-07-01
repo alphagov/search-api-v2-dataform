@@ -10,37 +10,20 @@ MERGE INTO
 USING
   (
   SELECT
-    TIMESTAMP_TRUNC(TIMESTAMP_MICROS(ga.event_timestamp),DAY) AS _PARTITIONTIME,
+    TIMESTAMP_TRUNC(TIMESTAMP_MICROS(event_timestamp),DAY) AS _PARTITIONTIME,
     'view-item' AS eventType,
-    CASE ga.user_pseudo_id
-      WHEN 'false' THEN CONCAT(ga.user_pseudo_id,(SELECT SAFE_CAST(value.int_value AS STRING) FROM UNNEST(event_params) WHERE key = 'ga_session_id'))
-      ELSE ga.user_pseudo_id
+    CASE user_pseudo_id
+      WHEN 'false' THEN CONCAT(user_pseudo_id, SAFE_CAST(ga_sessionid AS STRING))
+      ELSE user_pseudo_id
     END AS userPseudoId,
-    FORMAT_TIMESTAMP("%FT%TZ",TIMESTAMP_MICROS(ga.event_timestamp)) AS eventTime,
-    (CASE
-        WHEN ( SELECT value.string_value FROM UNNEST(items), UNNEST(item_params) WHERE KEY = 'item_content_id') IS NOT NULL THEN [STRUCT(( SELECT value.string_value FROM UNNEST(items), UNNEST(item_params) WHERE KEY = 'item_content_id') AS id, CAST(NULL AS string) AS name)]
-    END
-      ) AS documents,
-  FROM
-    `ga4-analytics-352613.analytics_330577055.events_*` ga
+    FORMAT_TIMESTAMP("%FT%TZ",TIMESTAMP_MICROS(event_timestamp)) AS eventTime,
+    (CASE WHEN content_id IS NOT NULL THEN [STRUCT(content_id AS id, CAST(NULL AS string) AS name)] END) AS documents,
+  FROM `ga4-analytics-352613.flattened_dataset.partitioned_flattened_events`
   WHERE
-    _TABLE_SUFFIX BETWEEN FORMAT_DATE('%Y%m%d',DATE_TRUNC(DATE_SUB(CURRENT_DATE(),INTERVAL 1 DAY),DAY)) AND FORMAT_DATE('%Y%m%d',DATE_TRUNC(DATE_SUB(CURRENT_DATE(),INTERVAL 1 DAY),DAY)) AND
-    ga.event_name='select_item'
-    AND (
-    SELECT
-      value.string_value
-    FROM
-      UNNEST(event_params)
-    WHERE
-      KEY = 'outbound') = "true"
-    AND (
-    SELECT
-      value.string_value
-    FROM
-      UNNEST(items),
-      UNNEST(item_params)
-    WHERE
-      KEY = 'item_content_id') IS NOT NULL) S
+    event_date = DATE_TRUNC(DATE_SUB(CURRENT_DATE(),INTERVAL 1 DAY),DAY) AND
+    event_name = 'select_item' AND
+    outbound = "true" AND
+    item_content_id IS NOT NULL) S
 ON
   T._PARTITIONTIME = S._PARTITIONTIME
   AND T.eventType = S.eventType
@@ -57,4 +40,3 @@ INSERT
     documents)
 VALUES
   (_PARTITIONTIME, eventType, userPseudoId, eventTime, documents)
-
