@@ -5,8 +5,21 @@ config {
     tags: ["search-monthly"]
 }
 
-MERGE INTO `${dataform.projectConfig.vars.project_id}.automated_evaluation_input.clickstream` T
-USING (
+DECLARE
+  PARTITIONTIME TIMESTAMP;
+
+BEGIN TRANSACTION;
+
+SET
+  PARTITIONTIME = TIMESTAMP_TRUNC((CURRENT_TIMESTAMP()),MONTH);
+
+DELETE
+FROM
+  automated_evaluation_input.clickstream
+WHERE
+  _PARTITIONTIME = PARTITIONTIME;
+
+INSERT INTO automated_evaluation_input.clickstream
   WITH
   events AS (
     SELECT
@@ -24,7 +37,7 @@ USING (
       item_list_name = 'Search' AND
       search_term IS NOT NULL AND
       regexp_extract(page_location, "order=([a-zA-Z\\\\-]+)" ) IS NULL AND
-      ARRAY_TO_STRING(regexp_extract_all(page_location, "((?:level_one_taxon|level_two_taxon|content_purpose_supergroup%5B%5D|public_timestamp%5Bfrom%5D|public_timestamp%5Bto%5D)=(?:%20&%20|[^&])*)" ), "&") = '' AND
+      NOT EXISTS(SELECT * FROM UNNEST(REGEXP_EXTRACT_ALL(page_location, "[?&]([^=&]+)")) AS key WHERE key NOT IN ("page", "keywords", "q")) AND
       event_date BETWEEN DATE_TRUNC(DATE_SUB(CURRENT_DATE(),INTERVAL 3 MONTH),MONTH) AND DATE_TRUNC(CURRENT_DATE(),MONTH)
   ),
   grouped AS (
@@ -68,7 +81,7 @@ USING (
     WHERE total>50
   )
   SELECT
-    TIMESTAMP_TRUNC((CURRENT_TIMESTAMP()),MONTH) AS _PARTITIONTIME,
+    PARTITIONTIME AS _PARTITIONTIME,
     STRUCT(
     query,
     ARRAY_AGG(
@@ -82,11 +95,6 @@ USING (
   WHERE score>0
   GROUP BY query
   ORDER BY MAX(total) DESC
-  LIMIT 1000) S
-ON
-  T._PARTITIONTIME = S._PARTITIONTIME AND
-  to_json_string(T.queryEntry) = to_json_string(S.queryEntry)
-  WHEN NOT MATCHED
-  THEN
-INSERT (_PARTITIONTIME, queryEntry)
-VALUES (_PARTITIONTIME, queryEntry)
+  LIMIT 1000
+
+COMMIT TRANSACTION;
