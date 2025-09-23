@@ -5,9 +5,23 @@ config {
     tags: ["search-monthly"]
 }
 
-MERGE INTO `${dataform.projectConfig.vars.project_id}.automated_evaluation_input.binary` T
-USING (
-  WITH
+DECLARE
+  PARTITIONTIME TIMESTAMP;
+
+BEGIN TRANSACTION;
+
+SET
+  PARTITIONTIME = TIMESTAMP_TRUNC((CURRENT_TIMESTAMP()),MONTH);
+
+DELETE
+FROM
+  automated_evaluation_input.binary
+WHERE
+  _PARTITIONTIME = PARTITIONTIME;
+
+INSERT INTO automated_evaluation_input.binary (_PARTITIONTIME,
+    queryEntry)
+WITH
   events AS (
     SELECT
       CASE user_pseudo_id
@@ -68,7 +82,7 @@ USING (
     WHERE total>50
   )
   SELECT
-    TIMESTAMP_TRUNC((CURRENT_TIMESTAMP()),MONTH) AS _PARTITIONTIME,
+    PARTITIONTIME AS _PARTITIONTIME,
     STRUCT(
     query,
     ARRAY_AGG(
@@ -82,11 +96,6 @@ USING (
   WHERE score>2
   GROUP BY query
   ORDER BY MAX(total) DESC
-  LIMIT 1000) S
-ON
-  T._PARTITIONTIME = S._PARTITIONTIME AND
-  to_json_string(T.queryEntry) = to_json_string(S.queryEntry)
-  WHEN NOT MATCHED
-  THEN
-INSERT (_PARTITIONTIME, queryEntry)
-VALUES (_PARTITIONTIME, queryEntry)
+  LIMIT 1000;
+
+COMMIT TRANSACTION;
