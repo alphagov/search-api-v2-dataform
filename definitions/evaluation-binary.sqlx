@@ -58,14 +58,10 @@ WITH
       count/SUM(count)
         OVER (
           PARTITION BY query
-          ORDER BY count
-          ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
         ) AS ratio,
       SUM(count)
         OVER (
           PARTITION BY query
-          ORDER BY count
-          ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
         ) AS total,
       id
     FROM grouped
