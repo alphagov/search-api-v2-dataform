@@ -17,11 +17,12 @@ USING
       ELSE user_pseudo_id
     END AS userPseudoId,
     FORMAT_TIMESTAMP("%FT%TZ",TIMESTAMP_MICROS(event_timestamp)) AS eventTime,
-    (CASE WHEN content_id IS NOT NULL THEN [STRUCT(content_id AS id, CAST(NULL AS string) AS name)] END) AS documents,
+    [STRUCT(content_id AS id, CAST(NULL AS string) AS name)] AS documents,
     FROM `ga4-analytics-352613.flattened_dataset.partitioned_flattened_events`
   WHERE
     event_date = DATE_TRUNC(DATE_SUB(CURRENT_DATE(),INTERVAL 1 DAY),DAY) AND
-    event_name='page_view' ) S
+    event_name='page_view' AND
+    content_id is not null ) S
 ON
   T._PARTITIONTIME = S._PARTITIONTIME
   AND T.eventType = S.eventType
