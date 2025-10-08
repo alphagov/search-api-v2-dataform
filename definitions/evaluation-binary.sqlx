@@ -58,14 +58,10 @@ WITH
       count/SUM(count)
         OVER (
           PARTITION BY query
-          ORDER BY count
-          ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
         ) AS ratio,
       SUM(count)
         OVER (
           PARTITION BY query
-          ORDER BY count
-          ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
         ) AS total,
       id
     FROM grouped
@@ -84,18 +80,17 @@ WITH
   SELECT
     PARTITIONTIME AS _PARTITIONTIME,
     STRUCT(
-    query,
-    ARRAY_AGG(
-      STRUCT(
-        id AS uri,
-        score
-      ) ORDER BY count DESC
-    ) AS targets
+      query,
+      [
+        STRUCT(
+          id AS uri,
+          score
+        )
+      ] AS targets
     ) AS queryEntry
   FROM scored
   WHERE score>2
-  GROUP BY query
-  ORDER BY MAX(total) DESC
+  ORDER BY total DESC, query, id
   LIMIT 1000;
 
 COMMIT TRANSACTION;
