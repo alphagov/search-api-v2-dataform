@@ -13,6 +13,30 @@ BEGIN TRANSACTION;
 SET
   PARTITIONTIME = TIMESTAMP_TRUNC((CURRENT_TIMESTAMP()),MONTH);
 
+-- Unpack URL parameters into an ARRAY<STRUCT<key STRING, value STRING>>
+--
+-- Test case:
+-- SELECT UNPACK_PARAMS("https://www.gov.uk/search/all?key_and_value=foo&key_only") AS params
+--
+-- Output in JSON format should be:
+-- [{
+--   "params": [{
+--     "key": "key_and_value",
+--     "value": "foo"
+--   }, {
+--     "key": "key_only",
+--     "value": null
+--   }]
+-- }]
+CREATE TEMP FUNCTION UNPACK_PARAMS(url STRING) AS ((
+  SELECT ARRAY_AGG(
+    STRUCT(
+      SPLIT(keyval, "=")[SAFE_ORDINAL(1)] AS key,
+      SPLIT(keyval, "=")[SAFE_ORDINAL(2)] AS value
+      )
+  ) FROM UNNEST(REGEXP_EXTRACT_ALL(url, "[?&]([^&]+)")) AS keyval
+));
+
 DELETE
 FROM
   automated_evaluation_input.binary
@@ -37,8 +61,16 @@ WITH
       event_name = 'select_item' AND
       item_list_name = 'Search' AND
       search_term IS NOT NULL AND
-      regexp_extract(page_location, "order=([a-zA-Z\\\\-]+)" ) IS NULL AND
-      ARRAY_TO_STRING(regexp_extract_all(page_location, "((?:level_one_taxon|level_two_taxon|content_purpose_supergroup%5B%5D|public_timestamp%5Bfrom%5D|public_timestamp%5Bto%5D)=(?:%20&%20|[^&])*)" ), "&") = '' AND
+      NOT EXISTS (
+        SELECT *
+        FROM UNNEST(UNPACK_PARAMS(page_location))
+        WHERE
+          NOT (key IN ("keywords", "q", "parent", "fbclid")) AND -- allow these particular parameters
+          NOT value IS NULL AND                                  -- allow parameters that have no value
+          NOT (key = "order" AND value = "relevance") AND        -- allow the default order even when it has been explicitly requested
+          NOT (key = "page" AND SAFE_CAST(value AS INT64) <= 10) -- allow clicks from the first 10 pages of search results
+      ) AND
+      search_term NOT LIKE "%[%]%" AND -- exclude queries that have been redacted, because they aren't literal queries
       event_date BETWEEN DATE_TRUNC(DATE_SUB(CURRENT_DATE(),INTERVAL 3 MONTH),MONTH) AND DATE_TRUNC(CURRENT_DATE(),MONTH)
   ),
   grouped AS (
