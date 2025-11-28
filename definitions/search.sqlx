@@ -7,53 +7,53 @@ config {
 
 MERGE INTO
   `${dataform.projectConfig.vars.project_id}.analytics_events_vertex.search-event` T
-USING
-  (
-  WITH
-    events AS (
+USING (
+  WITH events AS (
     SELECT
       TIMESTAMP_TRUNC(TIMESTAMP_MICROS(ga.event_timestamp),DAY) AS eventDate,
       'search' AS eventType,
-      CASE ga.user_pseudo_id
-        WHEN 'false' THEN CONCAT(ga.user_pseudo_id,(SELECT SAFE_CAST(value.int_value AS STRING) FROM UNNEST(event_params) WHERE key = 'ga_session_id'))
-        ELSE ga.user_pseudo_id
-      END AS userPseudoId,
+      (
+        CASE ga.user_pseudo_id
+          WHEN 'false' THEN CONCAT(ga.user_pseudo_id,(SELECT SAFE_CAST(value.int_value AS STRING) FROM UNNEST(event_params) WHERE key = 'ga_session_id'))
+          ELSE ga.user_pseudo_id
+        END
+      ) AS userPseudoId,
       FORMAT_TIMESTAMP("%FT%TZ",TIMESTAMP_MICROS(ga.event_timestamp)) AS eventTime,
       (
-      SELECT
-        COALESCE(value.string_value,SAFE_CAST(value.int_value AS STRING),SAFE_CAST(value.double_value AS STRING),SAFE_CAST(value.float_value AS STRING))
-      FROM
-        UNNEST(event_params)
-      WHERE
-        KEY = 'search_term') AS searchQuery,
-      SAFE_CAST(REGEXP_EXTRACT((
-          SELECT
-            value.string_value
-          FROM
-            UNNEST(event_params)
-          WHERE
-            KEY = 'page_location'), "page=(\\\\d+)" ) AS int64)-1 AS `offset`,
-      REGEXP_EXTRACT((
-        SELECT
-          value.string_value
-        FROM
-          UNNEST(event_params)
-        WHERE
-          KEY = 'page_location'), "order=([a-zA-Z\\\\-]+)" ) AS orderBy,
-      ARRAY_TO_STRING(REGEXP_EXTRACT_ALL((
-          SELECT
-            value.string_value
-          FROM
-            UNNEST(event_params)
-          WHERE
-            KEY = 'page_location'), "((?:level_one_taxon|level_two_taxon|content_purpose_supergroup%5B%5D|public_timestamp%5Bfrom%5D|public_timestamp%5Bto%5D)=(?:%20&%20|[^&])*)" ), "&") AS FILTER,
+        SELECT COALESCE(value.string_value,SAFE_CAST(value.int_value AS STRING),SAFE_CAST(value.double_value AS STRING),SAFE_CAST(value.float_value AS STRING))
+        FROM UNNEST(event_params)
+        WHERE KEY = 'search_term'
+      ) AS searchQuery,
+      SAFE_CAST(
+        REGEXP_EXTRACT(
+          (
+            SELECT value.string_value
+            FROM UNNEST(event_params)
+            WHERE KEY = 'page_location'
+          ), "page=(\\\\d+)" 
+        ) AS int64
+      )-1 AS `offset`,
+      REGEXP_EXTRACT(
+        (
+          SELECT value.string_value
+          FROM UNNEST(event_params)
+          WHERE KEY = 'page_location'
+        ), "order=([a-zA-Z\\\\-]+)" 
+      ) AS orderBy,
+      ARRAY_TO_STRING(
+        REGEXP_EXTRACT_ALL(
+          (
+            SELECT value.string_value
+            FROM UNNEST(event_params)
+            WHERE KEY = 'page_location'
+          ), "((?:level_one_taxon|level_two_taxon|content_purpose_supergroup%5B%5D|public_timestamp%5Bfrom%5D|public_timestamp%5Bto%5D)=(?:%20&%20|[^&])*)" 
+        ), "&"
+      ) AS FILTER,
       (
-      SELECT
-        value.string_value
-      FROM
-        UNNEST(event_params)
-      WHERE
-        KEY = 'ab_test') AS ab_test,
+        SELECT  value.string_value
+        FROM UNNEST(event_params)
+        WHERE KEY = 'ab_test'
+      ) AS ab_test,
       item_params.value.string_value AS id,
       MAX(item.item_id),
       item.item_list_index
@@ -62,36 +62,27 @@ USING
       UNNEST(items) AS item,
       UNNEST(item.item_params) AS item_params
     WHERE
-      _TABLE_SUFFIX BETWEEN FORMAT_DATE('%Y%m%d',DATE_TRUNC(DATE_SUB(CURRENT_DATE(),INTERVAL 1 DAY),DAY)) AND FORMAT_DATE('%Y%m%d',DATE_TRUNC(DATE_SUB(CURRENT_DATE(),INTERVAL 1 DAY),DAY)) AND
-      (
-      SELECT
-        value.string_value
-      FROM
-        UNNEST(event_params)
-      WHERE
-        KEY = 'publishing_app') = "search-api"
+      _TABLE_SUFFIX BETWEEN FORMAT_DATE('%Y%m%d',DATE_TRUNC(DATE_SUB(CURRENT_DATE(),INTERVAL 1 DAY),DAY)) AND FORMAT_DATE('%Y%m%d',DATE_TRUNC(DATE_SUB(CURRENT_DATE(),INTERVAL 1 DAY),DAY)) 
+      AND (
+        SELECT value.string_value
+        FROM UNNEST(event_params)
+        WHERE KEY = 'publishing_app'
+      ) = "search-api"
       AND EXISTS (
-      SELECT
-        1
-      FROM
-        UNNEST(event_params)
-      WHERE
-        KEY = 'search_term')
+        SELECT 1
+        FROM UNNEST(event_params)
+        WHERE KEY = 'search_term'
+      )
       AND event_name='view_item_list'
       AND (((SAFE_CAST(REGEXP_EXTRACT((
-                SELECT
-                  value.string_value
-                FROM
-                  UNNEST(event_params)
-                WHERE
-                  KEY = 'page_location'), "page=(\\\\d+)" ) AS int64)-1) <10)
+                SELECT value.string_value
+                FROM UNNEST(event_params)
+                WHERE KEY = 'page_location'), "page=(\\\\d+)" ) AS int64)-1) <10)
         OR ((SAFE_CAST(REGEXP_EXTRACT((
-                SELECT
-                  value.string_value
-                FROM
-                  UNNEST(event_params)
-                WHERE
-                  KEY = 'page_location'), "page=(\\\\d+)" ) AS int64)-1) IS NULL))
+                SELECT value.string_value
+                FROM UNNEST(event_params)
+                WHERE KEY = 'page_location'), "page=(\\\\d+)" ) AS int64)-1) IS NULL)
+      )
     GROUP BY
       eventDate,
       eventTime,
@@ -103,41 +94,55 @@ USING
       id,
       item_list_index,
       FILTER,
-      ab_test )
+      ab_test 
+  )
   SELECT
     eventDate AS _PARTITIONTIME,
     eventType,
     userPseudoId,
     eventTime,
-    CASE
-      WHEN `offset` IS NULL THEN STRUCT(searchQuery, CASE
-        WHEN orderBy = "relevance" THEN NULL
-        ELSE orderBy
-    END
-      AS orderBy,
-      0 AS `offset`)
-      ELSE STRUCT(searchQuery,
+    (
       CASE
-        WHEN orderBy = "relevance" THEN NULL
-        ELSE orderBy
-    END
-      AS orderBy,
-      `offset`)
-  END
-    AS searchInfo,
-    CASE
-      WHEN FILTER = '' THEN NULL
-      ELSE FILTER
-  END
-    AS FILTER,
-    CASE
-      WHEN ab_test IS NOT NULL THEN ARRAY[ab_test]
-  END
-    AS tagIds,
-    ARRAY_AGG(STRUCT(id AS id,
-        CAST(NULL AS string) AS name)
-    ORDER BY
-      SAFE_CAST(item_list_index AS INT64) ) AS documents
+        WHEN `offset` IS NULL THEN STRUCT(
+          searchQuery, 
+          (
+            CASE
+              WHEN orderBy = "relevance" THEN NULL
+              ELSE orderBy
+            END
+          ) AS orderBy,
+          0 AS `offset`
+        )
+        ELSE STRUCT(
+          searchQuery,
+          (
+            CASE
+              WHEN orderBy = "relevance" THEN NULL
+              ELSE orderBy
+            END
+          ) AS orderBy,
+          `offset`
+        )
+      END
+    ) AS searchInfo,
+    (
+      CASE
+        WHEN FILTER = '' THEN NULL
+        ELSE FILTER
+      END
+    ) AS FILTER,
+    (
+      CASE
+        WHEN ab_test IS NOT NULL THEN ARRAY[ab_test]
+      END
+    ) AS tagIds,
+    ARRAY_AGG(
+      STRUCT(
+        id AS id, 
+        CAST(NULL AS string) AS name
+      )
+      ORDER BY SAFE_CAST(item_list_index AS INT64)
+    ) AS documents
   FROM
     events
   WHERE
@@ -152,7 +157,8 @@ USING
     `offset`,
     orderBy,
     FILTER,
-    ab_test) S
+    ab_test
+) S
 ON
   T._PARTITIONTIME = S._PARTITIONTIME
   AND T.eventType = S.eventType
@@ -161,17 +167,15 @@ ON
   AND TO_JSON_STRING(T.documents) = TO_JSON_STRING(S.documents)
   AND TO_JSON_STRING(S.searchInfo) = TO_JSON_STRING(T.searchInfo)
   AND IFNULL(S.filter,"") = IFNULL(T.filter,"")
-  WHEN NOT MATCHED
-  THEN
-INSERT
-  (_PARTITIONTIME,
-    eventType,
-    userPseudoId,
-    eventTime,
-    searchInfo,
-    FILTER,
-    tagIds,
-    documents)
-VALUES
-  (_PARTITIONTIME, eventType, userPseudoId, eventTime, searchInfo, FILTER, tagIds, documents)
-
+WHEN NOT MATCHED THEN
+  INSERT
+    (_PARTITIONTIME,
+      eventType,
+      userPseudoId,
+      eventTime,
+      searchInfo,
+      FILTER,
+      tagIds,
+      documents)
+  VALUES
+    (_PARTITIONTIME, eventType, userPseudoId, eventTime, searchInfo, FILTER, tagIds, documents)
