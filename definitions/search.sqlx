@@ -50,6 +50,11 @@ USING (
         ), "&"
       ) AS FILTER,
       (
+        SELECT value.string_value 
+        FROM UNNEST(event_params) 
+        WHERE key = 'discovery_engine_attribution_token'
+      ) AS attributionToken,
+      (
         SELECT  value.string_value
         FROM UNNEST(event_params)
         WHERE KEY = 'ab_test'
@@ -94,6 +99,7 @@ USING (
       id,
       item_list_index,
       FILTER,
+      attributionToken,
       ab_test 
   )
   SELECT
@@ -136,6 +142,7 @@ USING (
         WHEN ab_test IS NOT NULL THEN ARRAY[ab_test]
       END
     ) AS tagIds,
+    attributionToken,
     ARRAY_AGG(
       STRUCT(
         id AS id, 
@@ -157,6 +164,7 @@ USING (
     `offset`,
     orderBy,
     FILTER,
+    attributionToken,
     ab_test
 ) S
 ON
@@ -176,6 +184,7 @@ WHEN NOT MATCHED THEN
       searchInfo,
       FILTER,
       tagIds,
+      attributionToken,
       documents)
   VALUES
-    (_PARTITIONTIME, eventType, userPseudoId, eventTime, searchInfo, FILTER, tagIds, documents)
+    (_PARTITIONTIME, eventType, userPseudoId, eventTime, searchInfo, FILTER, tagIds, attributionToken, documents)
