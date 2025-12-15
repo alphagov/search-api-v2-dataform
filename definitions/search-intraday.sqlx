@@ -172,6 +172,7 @@ ON
   AND T.eventType = S.eventType
   AND T.userPseudoId = S.userPseudoId
   AND T.eventTime = S.eventTime
+  AND T.attributionToken = S.attributionToken
   AND TO_JSON_STRING(T.documents) = TO_JSON_STRING(S.documents)
   AND TO_JSON_STRING(S.searchInfo) = TO_JSON_STRING(T.searchInfo)
   AND IFNULL(S.filter,"") = IFNULL(T.filter,"")
