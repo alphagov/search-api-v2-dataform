@@ -39,9 +39,17 @@ git push --force origin my-feature:integration
 
 1.3. Deploy the changes to integration: Click the button "New compilation" in the [integration Release configuration details](https://console.cloud.google.com/bigquery/dataform/locations/europe-west2/repositories/search_api_v2/release-configurations/integration?project=search-api-v2-integration) page.
 
-1.4. Manually run the workflow(s): Click the button "Start execution" in the [integration Releases and scheduling](https://console.cloud.google.com/bigquery/dataform/locations/europe-west2/repositories/search_api_v2/details/release-scheduling?project=search-api-v2-integration) page. Choose the "Default Dataform service account" from the options. Under "select actions to execute", select the actions that you want to test (usually these will be the files you have made changes to).
+1.4. Manually run the workflow(s): 
 
-<img width="556" height="849" alt="image" src="https://github.com/user-attachments/assets/995a37e2-f194-4999-8dcd-8f10c14b5bfa" />
+Click the button "Start execution" in the [integration Releases and scheduling](https://console.cloud.google.com/bigquery/dataform/locations/europe-west2/repositories/search_api_v2/details/release-scheduling?project=search-api-v2-integration) page. 
+
+Choose the "Dataform Service Account" from the options (this is **not** the same as the "Default Dataform service account"). 
+
+There may be a warning pop-up that says "Dataform could not check permissions for datasets that will be created by this workflow. Ensure that the service account has the necessary permission (e.g. BigQuery data editor role) to create them." You can ignore this.
+
+Under "select actions to execute", select the actions that you want to test (usually these will be the files you have made changes to).
+
+<img width="550" height="962" alt="image" src="https://github.com/user-attachments/assets/3d76a161-d928-4ce9-a1e8-1f2466b55df6" />
 
 1.5. Check in the [workflow execution logs](https://console.cloud.google.com/bigquery/dataform/locations/europe-west2/repositories/search_api_v2/details/workflows?project=search-api-v2-integration) that the workflow(s) has run successfully, and that the results in BigQuery are as expected.
 
