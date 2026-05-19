@@ -4,7 +4,7 @@
 
 This repo contains:
 
-- [`definitions/`](definitions/): Google Dataform SQLX pipeline definitions for processing and transforming GA4 data into Google Verex AI Search datasets
+- [`definitions/`](definitions/): Google Dataform SQLX pipeline definitions for processing and transforming GA4 data into Google Cloud Agent Search datasets
 - [`workflow_setting.yaml`](workflow_settings.yaml): Google Dataform workflow settings that apply to all pipelines
 
 ### What's not in this repo
